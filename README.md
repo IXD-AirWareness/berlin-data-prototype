@@ -1,2 +1,2 @@
 # berlin-data-prototype
-This is a prototype for clearing data access from the berlin senate for air quality.
+This is a prototype for data access from the berlin senate for air quality.
