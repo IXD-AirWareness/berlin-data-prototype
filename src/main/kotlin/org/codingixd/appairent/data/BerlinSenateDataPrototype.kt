@@ -3,15 +3,19 @@ package org.codingixd.appairent.data
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.github.kittinunf.fuel.httpGet
 import com.github.kittinunf.result.Result
+import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.time.LocalDate
+import java.time.Month
+import java.time.format.DateTimeFormatter
 
 enum class Type {
     all, traffic, background, suburb
 }
 
 enum class Period(val param: String) {
-    hour("1h"),
+    hourly("1h"),
     daily("24h"),
     monthly("1m"),
     yearly("1y"),
@@ -28,32 +32,21 @@ fun main(args: Array<String>) {
 
     val mapper = jacksonObjectMapper()
 
-    val startDate = "04.12.2018"
-    val startHour = "10"
 
-    val endDate = "04.12.2018"
-    val endHour = "11"
 
-    val type = Type.all.name
-    val period = Period.hour.param
-    val pollutant = Pollutant.cht.name
+    val period = Period.hourly
 
-    val query = "https://luftdaten.berlin.de/core/$pollutant.csv?stationgroup=$type&period=$period&timespan=custom&start%5Bdate%5D=$startDate&start%5Bhour%5D=$startHour&end%5Bdate%5D=$endDate&end%5Bhour%5D=$endHour"
+    for (year in 2012..2012) {
+        Pollutant.values().forEach { pollutant ->
+            Type.values().forEach { type ->
 
-    val (request, response, result) = query.httpGet().responseString()
+                val startDate = LocalDate.of(year, Month.OCTOBER, 1)
+                val startHour = 0
 
-    when (result) {
-        is Result.Failure -> { error(response) }
-        is Result.Success -> {
-            println(result.value)
+                val endDate = LocalDate.of(year, Month.DECEMBER, 31)
+                val endHour = 23
 
-            if (saveToFile) {
-                val path = Paths.get("./${pollutant}_${type}_${period}_$startDate-${startHour}_$endDate-$endHour.csv")
-                if (!Files.exists(path)) {
-                    Files.createFile(path)
-                    val file = path.toFile()
-                    file.writeText(result.value)
-                }
+                getPollutionCSV(pollutant, type, period, startDate, startHour, endDate, endHour, saveToFile)
             }
         }
     }
@@ -61,4 +54,54 @@ fun main(args: Array<String>) {
 
 }
 
+private fun getPollutionCSV(
+    pollutant: Pollutant,
+    type: Type,
+    period: Period,
+    startDate: LocalDate,
+    startHour: Int,
+    endDate: LocalDate,
+    endHour: Int,
+    saveToFile: Boolean
+): String {
+
+    val formatter = DateTimeFormatter.ofPattern("dd.MM.uuuu")
+
+    val query =
+        "https://luftdaten.berlin.de/core/${pollutant.name}.csv?stationgroup=${type.name}&period=${period.param}" +
+                "&timespan=custom&start%5Bdate%5D=${startDate.format(formatter)}&start%5Bhour%5D=$startHour" +
+                "&end%5Bdate%5D=${endDate.format(formatter)}&end%5Bhour%5D=$endHour"
+    println("QUERY: $query")
+
+    val (request, response, result) = query.httpGet().responseString()
+
+    when (result) {
+        is Result.Failure -> {
+            error(response)
+        }
+        is Result.Success -> {
+//            println(result.value)
+
+            if (saveToFile) {
+
+                val path = Paths.get("./data/${startDate.year}/${pollutant}_${type}_${period}_$startDate-${startHour}_$endDate-$endHour.csv")
+                if (!Files.exists(path)) {
+                    println("Creating File: ./data/${startDate.year}/${pollutant}_${type}_${period}_$startDate-${startHour}_$endDate-$endHour.csv")
+                    File(path.toUri()).parentFile.mkdirs()
+                    Files.createFile(path)
+                    val file = path.toFile()
+                    file.writeText(result.value)
+                }
+            }
+
+            return result.value
+        }
+    }
+}
+
+
+// end is exclusive to the interval
+fun daysInInterval(start: LocalDate, end: LocalDate): Sequence<LocalDate> = generateSequence(start) { d ->
+    d.plusDays(1).takeIf { it < end }
+}
 
